@@ -7,7 +7,6 @@ import numpy as np
 import argparse
 from typing import Dict, List, Optional, Iterator, Callable, Union, Tuple
 import datasets
-from dataset import get_examples, GSMDataset
 from torch.nn.utils.rnn import pad_sequence
 from tqdm import tqdm
 import sys
@@ -15,6 +14,21 @@ import re
 from rouge_score import rouge_scorer
 from collections import defaultdict
 import re
+
+def read_jsonl(path: str):
+    with open(path) as fh:
+        return [json.loads(line) for line in fh.readlines() if line]
+
+def get_examples(split):
+    path = os.path.join("data/", f"{split}.jsonl")
+    examples = read_jsonl(path)
+
+    for ex in examples:
+        ex.update(question=ex["question"] + "\n")
+        ex.update(answer=ex["answer"] + "<|endoftext|>")
+
+    print(f"{len(examples)} {split} examples")
+    return examples
 
 
 def remove_extra_spaces(string):
@@ -139,10 +153,10 @@ def main():
     elif args.model_name == 'llama2-7b-chat':
         model_path = 'NousResearch/Llama-2-7b-chat-hf'
         chat_template = "<s>[INST] {} End your answer as, 'Hence the answer is: '. [/INST]"
-    elif args.model_name == 'mistral7b':
+    elif args.model_name == 'mistral-7b':
         model_path = 'mistralai/Mistral-7B-v0.1'
         chat_template = "<s> {}"
-    elif args.model_name == 'mistral7b-chat':
+    elif args.model_name == 'mistral-7b-chat':
         model_path = 'mistralai/Mistral-7B-Instruct-v0.1'
         chat_template = "<s>[INST] {} End your answer as, 'Hence the answer is: '. [/INST]"
     elif args.model_name == 'gemma-7b':
@@ -151,7 +165,8 @@ def main():
     elif args.model_name == 'gemma-7b-chat':
         model_path = 'google/gemma-7b-it'
         chat_template = "<bos><start_of_turn>user\n {} <end_of_turn>\n<start_of_turn>model\n"
-    policy = transformers.AutoModelForCausalLM.from_pretrained(model_path, device_map='balanced')
+    policy = transformers.AutoModelForCausalLM.from_pretrained(
+        model_path, device_map='balanced', torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
     tokenizer = transformers.AutoTokenizer.from_pretrained(model_path, padding_side='left')
     tokenizer.pad_token_id = tokenizer.eos_token_id
 
@@ -159,7 +174,7 @@ def main():
     all_models = {}
     temps = [float(t) for t in args.temperatures.split(',')]
     output_dir = os.path.join(
-        args.model_name + '_samples', f'gsm8k_split_{args.split}_maxlen_{args.max_length}')
+        args.model_name + '_samples', f'gsm8k_split_{args.split}_maxnew_{args.max_new_tokens}')
     os.makedirs(output_dir, exist_ok=True)
     for temp in temps:
         all_models[temp] = os.path.join(output_dir, f'temp_{temp}.json')
@@ -186,10 +201,10 @@ def main():
 
             with torch.no_grad():
                 if temp > 0.0:
-                    outputs = policy.generate(**generator_input, max_new_tokens=args.max_length, do_sample=True, top_p=0.9, temperature=temp, pad_token_id=tokenizer.pad_token_id)
+                    outputs = policy.generate(**generator_input, max_new_tokens=args.max_new_tokens, do_sample=True, top_p=0.9, temperature=temp, pad_token_id=tokenizer.pad_token_id)
                 else:
                     # do greedy decoding
-                    outputs = policy.generate(**generator_input, max_new_tokens=args.max_length, do_sample=False, pad_token_id=tokenizer.pad_token_id)
+                    outputs = policy.generate(**generator_input, max_new_tokens=args.max_new_tokens, do_sample=False, pad_token_id=tokenizer.pad_token_id)
                 
                 for idx, output in enumerate(outputs):
                     responses["question"].append(batch['question'][idx])
@@ -219,66 +234,7 @@ if __name__ == '__main__':
     parser.add_argument('--temperatures', type=str, default='0.7')
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--batch_size', type=int, default=4)
-    parser.add_argument('--max_length', type=int, default=1024)
+    parser.add_argument('--max_new_tokens', type=int, default=128)
     args = parser.parse_args()
 
     main()
-
-
-
-
-
-# import torch as th
-# from dataset import get_examples, GSMDataset
-# from calculator import sample
-# from transformers import GPT2Tokenizer, GPT2LMHeadModel
-# from transformers import AutoModelForCausalLM, AutoTokenizer
-# import argparse
-# from tqdm import tqdm
-# import json
-
-
-# MODEL_MAP = {
-#     'mistral-7b-instruct': 'mistralai/Mistral-7B-Instruct-v0.1',
-# }
-
-# TOKENIZER_MAP = {
-#     'mistral-7b-instruct': 'mistralai/Mistral-7B-Instruct-v0.1',
-# }
-
-
-# parser = argparse.ArgumentParser(description="Grade School Math Evaluation")
-# parser.add_argument("--model", type=str, default="gpt2", help="Model name or path")
-# parser.add_argument("--batchsize", type=int, default=4, help="Batch size for evaluation")
-# parser.add_argument("--max_length", type=int, default=512, help="Maximum length of input sequences")
-
-
-# args = parser.parse_args()
-
-# model_name = args.model
-# batch_size = args.batchsize
-
-# device = "cuda" if th.cuda.is_available() else "cpu"
-
-# model = AutoModelForCausalLM.from_pretrained(MODEL_MAP[model_name])
-# tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_MAP[model_name])
-
-# model.to(device)
-# print("Model Loaded")
-# test_examples = get_examples("test")
-# decoded_outputs = {}
-    
-# for i in tqdm(range(0, len(test_examples), batch_size)):
-#     batch = test_examples[i:i+batch_size]
-#     batch = [{"role": "user", "content": x["question"]} for x in batch]
-#     encodeds = tokenizer.apply_chat_template(batch, return_tensors="pt", max_length=args.max_length)
-#     model_inputs = encodeds.to(device)
-#     generated_ids = model.generate(model_inputs, max_new_tokens=1000, do_sample=False)
-#     decoded = tokenizer.batch_decode(generated_ids)
-#     for j in range(i, i+batch_size):
-#         decoded_outputs[j] = {
-#             "input": test_examples[j],
-#             "output": decoded[j-i]
-#         }
-
-# json.dump(decoded_outputs, open(f"outputs_{model_name}.json", "w"))
