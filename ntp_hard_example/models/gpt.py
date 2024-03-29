@@ -49,7 +49,7 @@ class GPT(Transformer):
     def from_pretrained(cls, model_type, teacherless_token=None):
         assert model_type in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}
         # only dropout can be overridden see more notes below
-        from transformers import GPT2LMHeadModel
+        from transformers import GPT2LMHeadModel, AutoModelForCausalLM
         print("loading weights from pretrained gpt: %s" % model_type)
 
         # n_layer, n_head and n_embd are determined from model_type

@@ -196,8 +196,8 @@ Path(args.save_dir).mkdir(parents=True, exist_ok=True)
 
 # tokenizer
 tokenizer = AutoTokenizer.from_pretrained(
-    'gpt2',
-    # "NousResearch/Llama-2-7b-hf", 
+    # 'gpt2',
+    "NousResearch/Llama-2-7b-hf", 
     trust_remote_code=True)
 tokenizer.pad_token_id = tokenizer.eos_token_id
 
@@ -217,23 +217,23 @@ path = './checkpoints/' + run_name + '.pt'
 
 # model stuff
 model = AutoModelForCausalLM.from_pretrained(
-    # 'NousResearch/Llama-2-7b-hf',
-    'gpt2', 
-    # use_flash_attention_2=True, 
+    'NousResearch/Llama-2-7b-hf',
+    # 'gpt2', 
+    use_flash_attention_2=True, 
     torch_dtype=ptdtype, 
     trust_remote_code =True,
     do_sample=False)
 model.train()
-# config = LoraConfig(
-#     r=8, 
-#     lora_alpha=32, 
-#     target_modules=find_all_linear_names(model), 
-#     lora_dropout=0.05,
-#     bias="none", 
-#     task_type="CAUSAL_LM"
-# )
-# model = get_peft_model(model, config)
-# model.config.use_cache = False
+config = LoraConfig(
+    r=8, 
+    lora_alpha=32, 
+    target_modules=find_all_linear_names(model), 
+    lora_dropout=0.05,
+    bias="none", 
+    task_type="CAUSAL_LM"
+)
+model = get_peft_model(model, config)
+model.config.use_cache = False
 
 
 # Training arguments for HuggingFace Trainer

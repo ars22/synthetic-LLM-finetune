@@ -42,7 +42,7 @@ parser.add_argument(
         "--unrolled", action=argparse.BooleanOptionalAction, default=True, help="For chess, unrolled board state",
     )
 parser.add_argument(
-        "--batch_size", type=int, default=64, help="Batch size",
+        "--batch_size", type=int, default=256, help="Batch size",
     )
 parser.add_argument(
         "--lr", type=float, default=5e-4, help="Learning rate",
@@ -66,7 +66,7 @@ parser.add_argument(
         "--eval_train", action=argparse.BooleanOptionalAction, default=False, help="Eval for training set",
     )
 parser.add_argument(
-        "--eval_every", type=int, default=5000, help="Interval (in steps) to evaluate the model on test",
+        "--eval_every", type=int, default=100, help="Interval (in steps) to evaluate the model on test",
     )
 parser.add_argument(
         "--use_wandb", action=argparse.BooleanOptionalAction, default=False, help="Whether to use wandb",
@@ -180,11 +180,13 @@ for ep in range(args.epochs):
         if num_iters % args.eval_every == 0 and num_iters > 1:
             # Generate sequences and check accuracies
             if args.eval_train:
-                results = evaluate(model, train_loader, temperature=0.8, top_k=top_k, results=results, mode='Train')
+                results = evaluate(model, train_loader, temperature=2, pass_at_k=1,top_k=top_k, results=results, mode='Train')
                 results = evaluate_forced(model, train_loader, results=results, mode='train')
 
-            results = evaluate(model, test_loader, temperature=0.8, ctx=ctx, top_k=top_k, results=results, mode='Test')
+            results = evaluate(model, test_loader, temperature=2, pass_at_k=1, ctx=ctx, top_k=top_k, results=results, mode='Test')
             results = evaluate_forced(model, test_loader, ctx=ctx, results=results, mode='Test')
+
+            print(results)
 
             if wandb_log:
                 wandb.log(results)
