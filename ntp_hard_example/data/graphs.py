@@ -102,7 +102,7 @@ def generate_and_save(n_train, n_test, degSource, pathLen, numNodes, reverse=Fal
     file.close()
 
 
-def prefix_target_list(filename=None, reverse=False):
+def prefix_target_list(filename=None, reverse=False, cot=False):
     """
     Load graphs and split them into prefix and target and return the list
     """
@@ -114,13 +114,22 @@ def prefix_target_list(filename=None, reverse=False):
         target = line.strip().split('=')[1]
         if reverse:
             target = ','.join(target.split(',')[::-1])
+        if cot:
+            if reverse:
+                raise ValueError("Cannot be cot and reverse at the same time.")
+            rev_path = target.split(',')[::-1]
+            path_str = ''
+            for node in rev_path:
+                path_str += str(node) + ','
+            path_str = path_str[:-1] + ':' + target
+            target = path_str
         data_list.append((prefix, target))
 
     return data_list
 
 
 class Graphs(Dataset):
-    def __init__(self, tokenizer, n_samples, data_path, device, eval=False, teacherless_token=None, reverse=False):
+    def __init__(self, tokenizer, n_samples, data_path, device, eval=False, teacherless_token=None, reverse=False, cot=False):
         self.tokenizer = tokenizer
         self.n_samples = n_samples
         self.device = device
@@ -128,8 +137,9 @@ class Graphs(Dataset):
         self.data_path = data_path
         self.teacherless_token = teacherless_token
         self.reverse = reverse
+        self.cot = cot
 
-        self.data_file = prefix_target_list(self.data_path, reverse=reverse)[:n_samples]
+        self.data_file = prefix_target_list(self.data_path, reverse=reverse, cot=cot)[:n_samples]
         self.tokenized, self.num_prefix_tokens, self.num_target_tokens = tokenizer.tokenize(self.data_file)
 
         self.num_tokens = self.num_prefix_tokens + self.num_target_tokens

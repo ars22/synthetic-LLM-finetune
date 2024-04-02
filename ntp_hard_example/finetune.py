@@ -10,6 +10,7 @@ from evaluate_model import evaluate, evaluate_forced
 from models import get_model
 from tokenizing import get_tokenizer
 import wandb
+from pprint import pprint
 
 # Parse arguments
 parser = argparse.ArgumentParser(description="Next-token failures")
@@ -63,10 +64,13 @@ parser.add_argument(
         "--reverse", action=argparse.BooleanOptionalAction, default=False, help="Standard format or reverse targets",
     )
 parser.add_argument(
+        "--cot", action=argparse.BooleanOptionalAction, default=False, help="Standard format or cot targets",
+    )
+parser.add_argument(
         "--eval_train", action=argparse.BooleanOptionalAction, default=False, help="Eval for training set",
     )
 parser.add_argument(
-        "--eval_every", type=int, default=100, help="Interval (in steps) to evaluate the model on test",
+        "--eval_every", type=int, default=400, help="Interval (in steps) to evaluate the model on test",
     )
 parser.add_argument(
         "--use_wandb", action=argparse.BooleanOptionalAction, default=False, help="Whether to use wandb",
@@ -87,7 +91,9 @@ torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.deterministic = False
 
 # Model stuff
-top_k = 1
+top_k = 1000
+temperature = 1.
+pass_at_k = 256
 
 # Evaluation stuff
 eval_iters = 1000
@@ -180,13 +186,13 @@ for ep in range(args.epochs):
         if num_iters % args.eval_every == 0 and num_iters > 1:
             # Generate sequences and check accuracies
             if args.eval_train:
-                results = evaluate(model, train_loader, temperature=2, pass_at_k=1,top_k=top_k, results=results, mode='Train')
+                results = evaluate(model, train_loader, temperature=temperature, pass_at_k=pass_at_k, top_k=top_k, results=results, mode='Train')
                 results = evaluate_forced(model, train_loader, results=results, mode='train')
 
-            results = evaluate(model, test_loader, temperature=2, pass_at_k=1, ctx=ctx, top_k=top_k, results=results, mode='Test')
+            results = evaluate(model, test_loader, temperature=temperature, pass_at_k=pass_at_k, ctx=ctx, top_k=top_k, results=results, mode='Test')
             results = evaluate_forced(model, test_loader, ctx=ctx, results=results, mode='Test')
 
-            print(results)
+            pprint(results)
 
             if wandb_log:
                 wandb.log(results)

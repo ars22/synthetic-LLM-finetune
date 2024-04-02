@@ -30,11 +30,11 @@ def evaluate(model, loader, ctx, temperature, top_k, results=None, mode='test', 
             with ctx:
                 y_pred.append(model.generate(x, num_target_tokens, temperature=temperature, top_k=top_k))
         
-        y_pred = torch.stack(y_pred, dim=0).mean(dim=0)
+        y_pred = torch.stack(y_pred, dim=0)
         #model.reset_cache()
 
         # Check how many tokens we get right and how many predictions are completely correct
-        correct = torch.tensor([y.eq(y_pred[i, :, -num_target_tokens:]).float() for i in range(len(y_pred))]).to(y.device)
+        correct = torch.stack([y.eq(y_pred[i, :, -num_target_tokens:]).float() for i in range(len(y_pred))])
 
         # Completely correct
         completely_correct = torch.tensor([
@@ -42,11 +42,11 @@ def evaluate(model, loader, ctx, temperature, top_k, results=None, mode='test', 
         total_acc.update(torch.max(completely_correct).item(), x.shape[0])
 
         # Individual token accuracy
-        per_token_acc = correct.mean(dim=1).max(dim=0)
+        per_token_acc = correct.mean(dim=1).max(dim=0)[0]
         for i in range(num_target_tokens):
             tokens_corr[i].update(per_token_acc[i].item(), x.shape[0])
 
-        bar.set_description(f'{mode} pass_at_k accuracy: {total_acc.get(percentage=True):.2f}')
+        bar.set_description(f'{mode} pass_at_{pass_at_k} accuracy: {total_acc.get(percentage=True):.2f}')
 
     #model.empty_cache()
 
@@ -80,7 +80,7 @@ def evaluate_forced(model, loader, ctx, results=None, mode='test'):
         total_acc.update(val=accs['acc'], num=x.shape[0])
         total_loss.update(val=loss, num=x.shape[0])
         for i in range(num_target_tokens):
-            tokens_corr[i].update(accs['token_acc'], x.shape[0])
+            tokens_corr[i].update(accs['token_acc'][i].item(), x.shape[0])
 
         bar.set_description('Forced Loss: {:.4f} Forced Acc: {:.2f}'.format(total_loss.get(),
                                                               total_acc.get(percentage=True)))
@@ -89,6 +89,6 @@ def evaluate_forced(model, loader, ctx, results=None, mode='test'):
         results[mode + '/forced loss'] = total_loss.get()
         results[mode + '/forced accuracy'] = total_acc.get(percentage=True)
         for i in range(num_target_tokens):
-            results[mode + '/token_' + str(i + 1)] = tokens_corr[i].get(percentage=True)
+            results[mode + '/forced_token_' + str(i + 1)] = tokens_corr[i].get(percentage=True)
 
     return results
