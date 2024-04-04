@@ -46,6 +46,9 @@ class GPTConfig:
     dtype = torch.bfloat16
     cache: bool = True
     max_bsz: int = 16
+    is_encoder_decoder: bool = False
+    def to_dict(self):
+        return self.__dict__
 
 
 @dataclass

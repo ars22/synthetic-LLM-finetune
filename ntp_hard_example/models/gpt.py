@@ -64,6 +64,7 @@ class GPT(Transformer):
         config_args['block_size'] = 1024  # always 1024 for GPT model checkpoints
         config_args['bias'] = True  # always True for GPT model checkpoints
         config_args['teacherless_token'] = teacherless_token
+        config_args['is_encoder_decoder'] = False
 
         config = GPTConfig(**config_args)
         model = GPT(config)

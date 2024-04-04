@@ -58,6 +58,9 @@ parser.add_argument(
         "--save_every", type=int, default=5000, help="Interval (in steps) at which to save model",
     )
 parser.add_argument(
+        "--pass_at_k", type=int, default=1, help="pass at k eval",
+    )
+parser.add_argument(
         "--teacherless", action=argparse.BooleanOptionalAction, default=False, help="Standard or teacherless training",
     )
 parser.add_argument(
@@ -93,7 +96,7 @@ torch.backends.cudnn.deterministic = False
 # Model stuff
 top_k = 1000
 temperature = 1.
-pass_at_k = 256
+pass_at_k = args.pass_at_k
 
 # Evaluation stuff
 eval_iters = 1000

@@ -4,11 +4,14 @@ from tokenizing.numeral_tokenizer import NumeralTokenizer
 
 
 class Tokenizer:
-    def __init__(self, encoder, decoder, vocab_size, name=None):
+    def __init__(self, encoder, decoder, vocab_size, batch_decoder=None, name=None, pad_token_id=None, eos_token_id=None):
         self.encode = encoder
         self.decode = decoder
+        self.batch_decode = batch_decoder
         self.vocab_size = vocab_size
         self.name = name
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
 
     def tokenize(self, data_list):
         """
@@ -34,6 +37,9 @@ class Tokenizer:
             print('Equal sequence lengths!')
 
         return out, prefix_len, target_len
+    
+    def __call__(self, input, add_special_tokens=False):
+        return self.encode(input, add_special_tokens=add_special_tokens)
 
 
 def get_tokenizer(args):
@@ -42,7 +48,8 @@ def get_tokenizer(args):
         tokenizer = Tokenizer(encoder=t.encode, decoder=t.decode, vocab_size=args.num_nodes + 4, name='numeral')
     elif args.model.startswith('gpt2'):
         t = AutoTokenizer.from_pretrained('gpt2')
-        tokenizer = Tokenizer(encoder=t.encode, decoder=t.decode, vocab_size=50257 , name='gpt2')
+        t.pad_token_id = t.eos_token_id
+        tokenizer = Tokenizer(encoder=t.encode, decoder=t.decode, vocab_size=50257 , batch_decoder=t.batch_decode, name='gpt2', pad_token_id=t.pad_token_id, eos_token_id=t.eos_token_id)
     elif args.model.startswith('pythia'):
         t = AutoTokenizer.from_pretrained('EleutherAI/' + args.model)
         tokenizer = Tokenizer(encoder=t.encode, decoder=t.decode, vocab_size=50304, name='gpt2')
