@@ -102,7 +102,7 @@ def generate_and_save(n_train, n_test, degSource, pathLen, numNodes, reverse=Fal
     file.close()
 
 
-def prefix_target_list(filename=None, reverse=False, cot=False):
+def prefix_target_list(filename=None, reverse=False, cot=False, pos=False):
     """
     Load graphs and split them into prefix and target and return the list
     """
@@ -114,9 +114,13 @@ def prefix_target_list(filename=None, reverse=False, cot=False):
         target = line.strip().split('=')[1]
         if reverse:
             target = ','.join(target.split(',')[::-1])
+        if pos:
+            if reverse or cot:
+                raise ValueError("Cannot be pos and cot/reverse at the same time.")
+            prefix = prefix[:-1] + '$' * (len(target.split(",")) + 1) + '='
         if cot:
-            if reverse:
-                raise ValueError("Cannot be cot and reverse at the same time.")
+            if reverse or pos:
+                raise ValueError("Cannot be cot and reverse/pos at the same time.")
             rev_path = target.split(',')[::-1]
             path_str = ''
             for node in rev_path:
@@ -129,7 +133,7 @@ def prefix_target_list(filename=None, reverse=False, cot=False):
 
 
 class Graphs(Dataset):
-    def __init__(self, tokenizer, n_samples, data_path, device, eval=False, teacherless_token=None, reverse=False, cot=False):
+    def __init__(self, tokenizer, n_samples, data_path, device, eval=False, teacherless_token=None, reverse=False, cot=False, pos=False):
         self.tokenizer = tokenizer
         self.n_samples = n_samples
         self.device = device
@@ -139,7 +143,7 @@ class Graphs(Dataset):
         self.reverse = reverse
         self.cot = cot
 
-        self.data_file = prefix_target_list(self.data_path, reverse=reverse, cot=cot)[:n_samples]
+        self.data_file = prefix_target_list(self.data_path, reverse=reverse, cot=cot, pos=pos)[:n_samples]
         self.tokenized, self.num_prefix_tokens, self.num_target_tokens = tokenizer.tokenize(self.data_file)
 
         self.num_tokens = self.num_prefix_tokens + self.num_target_tokens

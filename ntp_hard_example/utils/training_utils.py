@@ -47,7 +47,7 @@ def get_run_name(args):
     name = args.dataset
     if args.dataset == 'graph':
         name += '_deg' + str(args.deg) + '_path_' + str(args.path_len) + 'num_nodes_' + str(args.num_nodes) + \
-                '_ntrain_' + str(args.n_train) 
+                '_ntrain_' + str(args.n_train) + '_cot_' + str(args.cot) 
     elif args.dataset == 'chess':
         name += '_mate_in_' + str(args.mate_in) + '_ntrain_' + str(args.n_train) + '_unrolled_' + str(args.unrolled) + \
                 '_teacherless_' + str(args.teacherless)

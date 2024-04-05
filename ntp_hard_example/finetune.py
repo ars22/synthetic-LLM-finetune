@@ -70,6 +70,9 @@ parser.add_argument(
         "--cot", action=argparse.BooleanOptionalAction, default=False, help="Standard format or cot targets",
     )
 parser.add_argument(
+        "--pos", action=argparse.BooleanOptionalAction, default=False, help="Standard format or pos tokens",
+    )
+parser.add_argument(
         "--eval_train", action=argparse.BooleanOptionalAction, default=False, help="Eval for training set",
     )
 parser.add_argument(

@@ -4,6 +4,7 @@ import torch
 from tqdm import tqdm
 
 from data import get_dataset
+from data.graphs import Graphs
 from utils.training_utils import get_lr, get_run_name, AverageMeter
 from torch.utils.data import DataLoader
 from models import get_model
@@ -68,8 +69,6 @@ def evaluate(model, loader, ctx, temperature, top_k, results=None, mode='test', 
     loader.dataset.eval()
     model.eval()
     total_acc = AverageMeter()
-    cot_acc = AverageMeter()
-    ans_acc = AverageMeter()
     tokens_corr = {i: AverageMeter() for i in range(num_target_tokens)}
     bar = tqdm(loader)
     #model.set_cache(loader.dataset.device)
@@ -92,15 +91,6 @@ def evaluate(model, loader, ctx, temperature, top_k, results=None, mode='test', 
         completely_correct = torch.tensor([
             torch.mean(correct[i].sum(dim=1).eq(num_target_tokens).to(torch.float)) for i in range(len(y_pred))]).to(y.device)
         total_acc.update(torch.max(completely_correct).item(), x.shape[0])
-        
-        cot_correct = torch.tensor([
-            torch.mean(correct[i, :num_target_tokens//2].mean(dim=1).to(torch.float)) for i in range(len(y_pred))]).to(y.device)
-        cot_acc.update(torch.max(cot_correct).item(), x.shape[0])
-        
-        ans_correct = torch.tensor([
-            torch.mean(correct[i, num_target_tokens//2:].mean(dim=1).to(torch.float)) for i in range(len(y_pred))]).to(y.device)
-        ans_acc.update(torch.max(ans_correct).item(), x.shape[0])
-        
         # Individual token accuracy
         per_token_acc = correct.mean(dim=1).max(dim=0)[0]
         for i in range(num_target_tokens):
@@ -111,9 +101,7 @@ def evaluate(model, loader, ctx, temperature, top_k, results=None, mode='test', 
     loader.dataset.train()
     model.train()
     if results is not None:
-        results[mode + '/full_accuracy'] = total_acc.get(percentage=True)
-        results[mode + '/cot_accuracy'] = cot_acc.get(percentage=True)
-        results[mode + '/ans_accuracy'] = ans_acc.get(percentage=True)
+        results[mode + '/accuracy'] = total_acc.get(percentage=True)
         for i in range(num_target_tokens):
             results[mode + '/token_' + str(i + 1)] = tokens_corr[i].get(percentage=True)
     return results
@@ -179,9 +167,6 @@ parser.add_argument(
     )
 parser.add_argument(
         "--cot", action=argparse.BooleanOptionalAction, default=False, help="Standard format or cot targets",
-    )
-parser.add_argument(
-        "--pos", action=argparse.BooleanOptionalAction, default=False, help="Standard format or pos tokens",
     )
 parser.add_argument(
         "--eval_train", action=argparse.BooleanOptionalAction, default=False, help="Eval for training set",
@@ -268,7 +253,7 @@ ctx = nullcontext() if device == 'cpu' else torch.amp.autocast(device_type=devic
 
 # Setup wandb logging
 if wandb_log:
-    run = wandb.init(project='next-token-failures', entity=wandb_entity, config=args.__dict__,)
+    wandb.init(project='next-token-failures', entity=wandb_entity, config=args.__dict__,)
     wandb.run.name = run_name
 
 results = {}
@@ -313,58 +298,63 @@ for ep in range(args.epochs_sft):
             # results = evaluate_forced(model, test_loader, ctx=ctx, results=results, mode='Test')
             pprint(results)
             if wandb_log:
-                run.log(results)
+                wandb.log(results)
 
 results = evaluate(model, test_loader, temperature=temperature, pass_at_k=pass_at_k, ctx=ctx, top_k=top_k, results=results, mode='Test')
 # results = evaluate_forced(model, test_loader, ctx=ctx, results=results, mode='Test')
-# pprint(results)
-if wandb_log:
-    run.log(results)
+pprint(results)
 
 # sample model generation and rate them
+os.environ["WANDB_DISABLED"] = "true"
 
-def create_dpo_dataset(prompts, generations, scores):
+def create_sft_data_list(prompts, generations, scores):
     n = scores.shape[0]
-    chosen = []
-    rejected = []
-    final_prompts = []
+    sft_data_list = []
     bar = tqdm(range(n))
     for i in bar:
         highest_score_id = torch.argmax(scores[i])
-        lowest_score_id = torch.argmin(scores[i])
-        # if scores[i][highest_score_id] == 1.0:
-        chosen.append(generations[i, highest_score_id])
-        rejected.append(generations[i, lowest_score_id])    
-        final_prompts.append(prompts[i])
-        bar.set_description(f'Chosen: {scores[i][highest_score_id]} Rejected: {scores[i][lowest_score_id]}')
-    return Dataset.from_dict({'chosen': chosen, 'rejected': rejected, 'prompt': final_prompts})
+        sft_data_list.append(prompts[i]+generations[i, highest_score_id])
+        bar.set_description(f'Chosen: {scores[i][highest_score_id]}')
+    return sft_data_list
 
 # ref_model = deepcopy(model)
     
+online_sft_model = deepcopy(model)
     
 for i in range(10):
-    ref_model = deepcopy(model)
     prompts, generations, scores = generate_and_score(model, train_loader, ctx, temperature=2.5, top_k=top_k, n_samples=n_samples)
-    dpo_dataset = create_dpo_dataset(prompts, generations, scores)
-    training_args = TrainingArguments(output_dir="./output", remove_unused_columns=False)
-    training_args = training_args.set_training(learning_rate=1e-5, batch_size=64)
-    dpo_tokenizer = AutoTokenizer.from_pretrained('gpt2')
-    dpo_tokenizer.pad_token_id = dpo_tokenizer.eos_token_id
-    dpo_trainer = DPOTrainer(
-        model, 
-        ref_model=ref_model, 
-        args=training_args, 
-        train_dataset=dpo_dataset, 
-        tokenizer=dpo_tokenizer,
-        max_length=64,
-        max_prompt_length=64,
-        beta=1.)
-    dpo_trainer.train()
+    sft_data_list = create_sft_data_list(prompts, generations, scores)
+    with open('sft_data_list.txt', 'w') as f:
+        for item in sft_data_list:
+            f.write("%s\n" % item)
+    sft_data = Graphs(tokenizer=tokenizer, n_samples=len(sft_data_list), data_path='sft_data_list.txt', device=device,
+                            teacherless_token=args.teacherless_token, reverse=False, cot=False)
+    sft_loader = DataLoader(sft_data, batch_size=args.batch_size, shuffle=False)
+    sft_bar = tqdm(sft_loader)
+    scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
+    lr = 1e-5
+    optimizer = torch.optim.AdamW(online_sft_model.parameters(), lr=lr, weight_decay=0.0)
+    ctx = nullcontext() if device == 'cpu' else torch.amp.autocast(device_type=device, dtype=ptdtype)
+    total_loss, total_acc = AverageMeter(), AverageMeter()
+    for x, y in sft_bar:    
+        with ctx:
+            logits = online_sft_model(x)['logits']
+            loss = torch.nn.functional.cross_entropy(logits.view(-1, logits.size(-1)), y.view(-1), ignore_index=-1)
+            acc = torch.mean((torch.argmax(logits[:, -train_data.num_target_tokens, :], dim=-1) == y[:, -train_data.num_target_tokens]).float())
+        total_loss.update(loss.item(), x.shape[0] * train_data.num_target_tokens)
+        total_acc.update(acc.item(), x.shape[0] * train_data.num_target_tokens)
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+        optimizer.zero_grad(set_to_none=True)
+        num_iters += 1
+        train_bar.set_description(
+            'Loss: {:.4f} Acc: {:.2f}'.format(total_loss.get(),
+             total_acc.get(percentage=True))
+        )
     results = evaluate(model, test_loader, temperature=temperature, pass_at_k=pass_at_k, ctx=ctx, top_k=top_k, results=results, mode='Test')
-    if wandb_log:
-        run.log(results)
-
+    
     # results = evaluate_forced(model, test_loader, ctx=ctx, results=results, mode='Test')
     # pprint(results)
 
-# python -i online_dpo.py --cot --n_train 400 --n_test 500 --epochs_sft 50 --n_samples 50 --use_wandb --wandb_entity "ars22"
+# python -i online_dpo.py --cot --n_train 400 --n_test 500 --epochs_sft 50 --n_samples 50
