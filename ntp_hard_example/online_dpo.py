@@ -154,7 +154,7 @@ parser.add_argument(
         "--unrolled", action=argparse.BooleanOptionalAction, default=True, help="For chess, unrolled board state",
     )
 parser.add_argument(
-        "--batch_size", type=int, default=256, help="Batch size",
+        "--batch_size", type=int, default=64, help="Batch size",
     )
 parser.add_argument(
         "--lr", type=float, default=5e-4, help="Learning rate",
@@ -347,8 +347,8 @@ for i in range(10):
     prompts, generations, scores = generate_and_score(model, train_loader, ctx, temperature=2.5, top_k=top_k, n_samples=n_samples)
     dpo_dataset = create_dpo_dataset(prompts, generations, scores)
     training_args = TrainingArguments(output_dir="./output", remove_unused_columns=False)
-    training_args = training_args.set_training(learning_rate=1e-5, batch_size=64)
-    dpo_tokenizer = AutoTokenizer.from_pretrained('gpt2')
+    training_args = training_args.set_training(learning_rate=args.lr, batch_size=args.batch_size)    
+    dpo_tokenizer = AutoTokenizer.from_pretrained(args.model)
     dpo_tokenizer.pad_token_id = dpo_tokenizer.eos_token_id
     dpo_trainer = DPOTrainer(
         model, 

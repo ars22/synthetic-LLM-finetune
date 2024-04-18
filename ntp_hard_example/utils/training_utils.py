@@ -39,7 +39,6 @@ def accuracy(logits, targets):
     seq_correct = torch.sum(correct, dim=1).eq(num_target_tokens).float()
     acc = torch.mean(seq_correct)
     per_token_acc = correct.mean(dim=0)
-
     return acc, per_token_acc
 
 

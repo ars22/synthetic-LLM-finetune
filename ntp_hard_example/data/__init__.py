@@ -23,8 +23,8 @@ def get_dataset(args, tokenizer, device):
                     str(args.num_nodes)
         train_path, test_path = data_path + '_train_200000.txt', data_path + '_test_20000.txt'
         train_data = Graphs(tokenizer=tokenizer, n_samples=args.n_train, data_path=train_path, device=device,
-                            teacherless_token=teacherless_token, reverse=args.reverse, cot=args.cot, pos=args.pos)
+                            teacherless_token=teacherless_token, reverse=args.reverse, cot=args.cot, pos=args.pos, pad_length=args.pad_length)
         test_data = Graphs(tokenizer=tokenizer, n_samples=args.n_test, data_path=test_path, device=device,
-                           teacherless_token=teacherless_token, reverse=args.reverse, cot=args.cot, pos=args.pos)
+                           teacherless_token=teacherless_token, reverse=args.reverse, cot=args.cot, pos=args.pos, pad_length=args.pad_length)
 
     return train_data, test_data

@@ -43,7 +43,7 @@ parser.add_argument(
         "--unrolled", action=argparse.BooleanOptionalAction, default=True, help="For chess, unrolled board state",
     )
 parser.add_argument(
-        "--batch_size", type=int, default=256, help="Batch size",
+        "--batch_size", type=int, default=64, help="Batch size",
     )
 parser.add_argument(
         "--lr", type=float, default=5e-4, help="Learning rate",
@@ -117,7 +117,7 @@ args.use_flash = True if device == 'cuda' else False
 warmup_iters = 100
 min_lr = 1e-5
 
-run_name = get_run_name(args)
+run_name = get_run_name(args) + '_sft'
 path = './checkpoints/' + run_name + '.pt'
 
 # Get tokenizer and de-tokenizer

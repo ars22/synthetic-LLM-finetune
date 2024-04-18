@@ -133,7 +133,7 @@ def prefix_target_list(filename=None, reverse=False, cot=False, pos=False):
 
 
 class Graphs(Dataset):
-    def __init__(self, tokenizer, n_samples, data_path, device, eval=False, teacherless_token=None, reverse=False, cot=False, pos=False):
+    def __init__(self, tokenizer, n_samples, data_path, device, eval=False, teacherless_token=None, reverse=False, cot=False, pos=False, pad_length=0):
         self.tokenizer = tokenizer
         self.n_samples = n_samples
         self.device = device
@@ -142,14 +142,15 @@ class Graphs(Dataset):
         self.teacherless_token = teacherless_token
         self.reverse = reverse
         self.cot = cot
+        self.pad_length = pad_length
 
-        self.data_file = prefix_target_list(self.data_path, reverse=reverse, cot=cot, pos=pos)[:n_samples]
-        self.tokenized, self.num_prefix_tokens, self.num_target_tokens = tokenizer.tokenize(self.data_file)
+        self.data_file = prefix_target_list(self.data_path, reverse=reverse, cot=cot, pos=pos)
+        self.tokenized, self.num_prefix_tokens, self.num_target_tokens = tokenizer.tokenize(self.data_file[:n_samples])
 
         self.num_tokens = self.num_prefix_tokens + self.num_target_tokens
 
     def __len__(self):
-        return len(self.data_file)
+        return len(self.tokenized)
 
     def __getitem__(self, idx):
         if self.eval_mode:
@@ -157,16 +158,18 @@ class Graphs(Dataset):
             return self.tokenized[idx].to(self.device)
 
         # Create inputs
-        x = self.tokenized[idx][:-1].clone()
-        if self.teacherless_token is not None:
-            x[self.num_prefix_tokens:] = self.teacherless_token
-            x = x.to(self.device)
+        x = self.tokenized[idx].clone()
+        if self.pad_length > 0:
+            x = torch.cat([x, torch.zeros((self.pad_length,)).long() + self.tokenizer.pad_token_id])
+        # if self.teacherless_token is not None:
+        #     x[self.num_prefix_tokens:] = self.teacherless_token
+        #     x = x.to(self.device)
         # Create targets in the form [-1, ..., -1, 4, 7, 9, 2, ...] where we replace the prefix tokens by -1 so that
         # we can skip their gradient calculation in the loss (double-check if that's correct)
         y = torch.cat([-torch.ones((self.num_prefix_tokens - 1, )),
-                       self.tokenized[idx][self.num_prefix_tokens:].clone()])
+                       x[self.num_prefix_tokens:].clone()])
 
-        return x.to(self.device), y.long().to(self.device)
+        return x[:-1].to(self.device), y.long().to(self.device)
 
     def eval(self):
         # Switch to "eval" mode when generating sequences without teacher-forcing
